@@ -16,6 +16,7 @@ from simulation.connection import ClientConnection
 from simulation.environment import CarlaEnvironment
 from parameters import *
 
+import wandb
 
 def parse_args():
     
@@ -58,6 +59,7 @@ def runner():
     total_timesteps = args.total_timesteps
     action_std_init = args.action_std_init
 
+
     try:
         if exp_name == 'ppo':
             run_name = "PPO"
@@ -76,10 +78,15 @@ def runner():
         writer = SummaryWriter(f"runs/{run_name}_{action_std_init}_{int(total_timesteps)}/{town}")
     else:
         writer = SummaryWriter(f"runs/{run_name}_{action_std_init}_{int(total_timesteps)}_TEST/{town}")
+        # init wandb
+        wandb.init(project="carla-runs", name=f"{run_name}_{action_std_init}_{int(total_timesteps)}_TEST/{town}")
+
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}" for key, value in vars(args).items()])))
 
+    # add log to wandb
+    wandb.log({"hyperparameters": vars(args)})
 
     #Seeding to reproduce the results 
     random.seed(args.seed)
@@ -280,7 +287,10 @@ def runner():
                 writer.add_scalar("TEST: Deviation from Center/(t)", deviation_from_center, timestep)
                 writer.add_scalar("TEST: Distance Covered (m)/episode", distance_covered, episode)
                 writer.add_scalar("TEST: Distance Covered (m)/(t)", distance_covered, timestep)
-
+                
+                # log using wandb
+                wandb.log({"TEST: Episodic Reward/episode": scores[-1], "TEST: Cumulative Reward/info": cumulative_score, "TEST: Cumulative Reward/(t)": cumulative_score, "TEST: Episode Length (s)/info": np.mean(episodic_length), "TEST: Reward/(t)": current_ep_reward, "TEST: Deviation from Center/episode": deviation_from_center, "TEST: Deviation from Center/(t)": deviation_from_center, "TEST: Distance Covered (m)/episode": distance_covered, "TEST: Distance Covered (m)/(t)": distance_covered})
+                
                 episodic_length = list()
                 deviation_from_center = 0
                 distance_covered = 0
