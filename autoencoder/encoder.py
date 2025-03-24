@@ -1,11 +1,11 @@
 import os
 import torch
 import torch.nn as nn
+import pytorch_lightning as pl
 
+# device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-class VariationalEncoder(nn.Module):
+class VariationalEncoder(pl.LightningModule):
     def __init__(self, latent_dims):  
         super(VariationalEncoder, self).__init__()
 
@@ -37,12 +37,10 @@ class VariationalEncoder(nn.Module):
         self.sigma = nn.Linear(1024, latent_dims)
 
         self.N = torch.distributions.Normal(0, 1)
-        self.N.loc = self.N.loc.to(device)
-        self.N.scale = self.N.scale.to(device)
         self.kl = 0
 
     def forward(self, x):
-        x = x.to(device)
+        # x = x.to(device)
         x = self.encoder_layer1(x)
         x = self.encoder_layer2(x)
         x = self.encoder_layer3(x)
@@ -51,6 +49,8 @@ class VariationalEncoder(nn.Module):
         x = self.linear(x)
         mu =  self.mu(x)
         sigma = torch.exp(self.sigma(x))
+        self.N.loc = self.N.loc.to(self.device)
+        self.N.scale = self.N.scale.to(self.device)
         z = mu + sigma*self.N.sample(mu.shape)
         self.kl = (sigma**2 + mu**2 - torch.log(sigma) - 1/2).sum()
         return z
@@ -59,4 +59,4 @@ class VariationalEncoder(nn.Module):
         torch.save(self.state_dict(), self.model_file)
 
     def load(self):
-        self.load_state_dict(torch.load(self.model_file))
+        self.load_state_dict(torch.load(self.model_file, map_location='cpu'))
