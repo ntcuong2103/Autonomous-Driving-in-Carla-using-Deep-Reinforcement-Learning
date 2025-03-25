@@ -59,7 +59,7 @@ def runner():
     total_timesteps = args.total_timesteps
     action_std_init = args.action_std_init
 
-    device = 'cuda:1'
+    device = 'cuda'
 
     try:
         if exp_name == 'ppo':
@@ -77,6 +77,7 @@ def runner():
     
     if train == True:
         writer = SummaryWriter(f"runs/{run_name}_{action_std_init}_{int(total_timesteps)}/{town}")
+        wandb.init(project="carla-runs", name=f"{run_name}_{action_std_init}_{int(total_timesteps)}/{town}")
     else:
         writer = SummaryWriter(f"runs/{run_name}_{action_std_init}_{int(total_timesteps)}_TEST/{town}")
         # init wandb
@@ -127,7 +128,6 @@ def runner():
     #========================================================================
     #                           ALGORITHM
     #========================================================================
-    # try:
     time.sleep(0.5)
     
     if checkpoint_load:
@@ -214,24 +214,8 @@ def runner():
                 with open(chkpt_file, 'wb') as handle:
                     pickle.dump(data_obj, handle)
                 
-            
-            if episode % 5 == 0:
-
-                writer.add_scalar("Episodic Reward/episode", scores[-1], episode)
-                writer.add_scalar("Cumulative Reward/info", cumulative_score, episode)
-                writer.add_scalar("Cumulative Reward/(t)", cumulative_score, timestep)
-                writer.add_scalar("Average Episodic Reward/info", np.mean(scores[-5]), episode)
-                writer.add_scalar("Average Reward/(t)", np.mean(scores[-5]), timestep)
-                writer.add_scalar("Episode Length (s)/info", np.mean(episodic_length), episode)
-                writer.add_scalar("Reward/(t)", current_ep_reward, timestep)
-                writer.add_scalar("Average Deviation from Center/episode", deviation_from_center/5, episode)
-                writer.add_scalar("Average Deviation from Center/(t)", deviation_from_center/5, timestep)
-                writer.add_scalar("Average Distance Covered (m)/episode", distance_covered/5, episode)
-                writer.add_scalar("Average Distance Covered (m)/(t)", distance_covered/5, timestep)
-
-                episodic_length = list()
-                deviation_from_center = 0
-                distance_covered = 0
+            # log using wandb
+            wandb.log({"Episodic Reward": scores[-1], "Cumulative Reward": cumulative_score, "Episode Length (s)": episodic_length[-1], "Deviation from Center": info[1], "Distance Covered (m)": info[0], "Episode": episode, "Timestep": timestep})
 
             if episode % 100 == 0:
                 
@@ -258,11 +242,12 @@ def runner():
                 observation, reward, done, info = env.step(action)
                 if observation is None:
                     break
+                print(observation[1])
                 from PIL import Image
                 # save observation image
                 img = Image.fromarray(observation[0])
                 os.makedirs('images', exist_ok=True)
-                img.save(f'images/{timestep}.png')
+                img.save(f'images/{timestep:04d}.png')
 
                 
                 observation = encode(observation)
@@ -280,6 +265,7 @@ def runner():
                     
                     episodic_length.append(abs(t3.total_seconds()))
                     break
+                # time.sleep(0.03)
             deviation_from_center += info[1]
             distance_covered += info[0]
             
@@ -304,6 +290,7 @@ def runner():
             episodic_length = list()
             deviation_from_center = 0
             distance_covered = 0
+            break
 
         print("Terminating the run.")
         sys.exit()

@@ -2,6 +2,8 @@ import sys
 import torch
 from autoencoder.encoder import VariationalEncoder
 import pytorch_lightning as pl
+import os
+import torchvision.transforms as transforms
 
 
 class EncodeState(pl.LightningModule):
@@ -18,9 +20,8 @@ class EncodeState(pl.LightningModule):
             params.requires_grad = False
     
     def forward(self, observation):
-        image_obs = torch.tensor(observation[0], dtype=torch.float)
+        image_obs = transforms.ToTensor()(observation[0])
         image_obs = image_obs.unsqueeze(0)
-        image_obs = image_obs.permute(0,3,2,1)
         image_obs = self.encoder(image_obs.to(self.device)).cpu()
         navigation_obs = torch.tensor(observation[1], dtype=torch.float)
         observation = torch.cat((image_obs.view(-1), navigation_obs), -1)
