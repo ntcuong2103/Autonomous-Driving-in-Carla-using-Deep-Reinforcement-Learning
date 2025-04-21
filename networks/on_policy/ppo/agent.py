@@ -141,9 +141,10 @@ class PPOAgent(object):
         checkpoint_file = PPO_CHECKPOINT_DIR+self.town+"/ppo_policy_" + str(self.checkpoint_file_no)+"_.pth"
         torch.save(self.old_policy.state_dict(), checkpoint_file)
    
-    def load(self):
-        self.checkpoint_file_no = len(next(os.walk(PPO_CHECKPOINT_DIR+self.town))[2]) - 1
-        checkpoint_file = PPO_CHECKPOINT_DIR+self.town+"/ppo_policy_" + str(self.checkpoint_file_no)+"_.pth"
+    def load(self, checkpoint_file):
+        if checkpoint_file == None:
+            self.checkpoint_file_no = len(next(os.walk(PPO_CHECKPOINT_DIR+self.town))[2]) - 1
+            checkpoint_file = PPO_CHECKPOINT_DIR+self.town+"/ppo_policy_" + str(self.checkpoint_file_no)+"_.pth"
         self.old_policy.load_state_dict(torch.load(checkpoint_file))
         self.policy.load_state_dict(torch.load(checkpoint_file))
-            
+        print("loading model from file: ", checkpoint_file)    

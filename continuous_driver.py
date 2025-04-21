@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument('--train', default=True, type=boolean_string, help='is it training?')
     parser.add_argument('--town', type=str, default="Town07", help='which town do you like?')
     parser.add_argument('--load-checkpoint', type=bool, default=MODEL_LOAD, help='resume training?')
+    parser.add_argument('--checkpoint', type=str, default=None, help='path to the checkpoint file')
     parser.add_argument('--torch-deterministic', type=lambda x:bool(strtobool(x)), default=True, nargs='?', const=True, help='if toggled, `torch.backends.cudnn.deterministic=False`')
     parser.add_argument('--cuda', type=lambda x:bool(strtobool(x)), default=True, nargs='?', const=True, help='if toggled, cuda will not be enabled by deafult')
     args = parser.parse_args()
@@ -140,11 +141,11 @@ def runner():
             cumulative_score = data['cumulative_score']
             action_std_init = data['action_std_init']
         agent = PPOAgent(town, action_std_init)
-        agent.load()
+        agent.load(args.checkpoint)
     else:
         if train == False:
             agent = PPOAgent(town, action_std_init)
-            agent.load()
+            agent.load(args.checkpoint)
             for params in agent.old_policy.actor.parameters():
                 params.requires_grad = False
         else:
@@ -189,6 +190,16 @@ def runner():
                     t3 = t2-t1
                     
                     episodic_length.append(abs(t3.total_seconds()))
+                    
+                    # print the reason by checking env
+                    if env.collision_history != None and len(env.collision_history) != 0:
+                        print("Collision detected")
+                    elif env.distance_from_center > env.max_distance_from_center:
+                        print("Distance from center exceeded")
+                    elif env.velocity < 1.0:
+                        print("Velocity too low")
+                    elif env.velocity > env.max_speed:
+                        print("Velocity too high")
                     break
             
             deviation_from_center += info[1]
@@ -202,7 +213,7 @@ def runner():
                 cumulative_score = np.mean(scores)
 
 
-            print('Episode: {}'.format(episode),', Timestep: {}'.format(timestep),', Reward:  {:.2f}'.format(current_ep_reward),', Average Reward:  {:.2f}'.format(cumulative_score))
+            print('Episode: {}'.format(episode),', Timestep: {}'.format(t),', Reward:  {:.2f}'.format(current_ep_reward),', Average Reward:  {:.2f}'.format(cumulative_score))
             if episode % 10 == 0:
                 agent.learn()
                 agent.chkpt_save()
@@ -215,7 +226,7 @@ def runner():
                     pickle.dump(data_obj, handle)
                 
             # log using wandb
-            wandb.log({"Episodic Reward": scores[-1], "Cumulative Reward": cumulative_score, "Episode Length (s)": episodic_length[-1], "Deviation from Center": info[1], "Distance Covered (m)": info[0], "Episode": episode, "Timestep": timestep})
+            wandb.log({"Episodic Reward": scores[-1], "Cumulative Reward": cumulative_score, "Episode Length (s)": episodic_length[-1], "Episode Length": t , "Deviation from Center": info[1], "Distance Covered (m)": info[0], "Episode": episode, "Timestep": timestep})
 
             if episode % 100 == 0:
                 
@@ -230,6 +241,8 @@ def runner():
         sys.exit()
     else:
         #Testing
+        out_images = []
+        
         while timestep < args.test_timesteps:
             observation = env.reset()
             observation = encode(observation)
@@ -240,15 +253,22 @@ def runner():
                 # select action with policy
                 action = agent.get_action(observation, train=False)
                 observation, reward, done, info = env.step(action)
+                time.sleep(0.001)
                 if observation is None:
                     break
-                print(observation[1])
+                # print(observation[1])
                 from PIL import Image
-                # save observation image
-                img = Image.fromarray(observation[0])
-                os.makedirs('images', exist_ok=True)
-                img.save(f'images/{timestep:04d}.png')
-
+                
+                
+                # save both camera images in a single image
+                img1 = Image.fromarray(observation[0]) # size (160, 80, 3)
+                img2 = Image.fromarray(observation[2]) # size (720, 720, 3)
+                img1 = img1.resize((720, 360))
+                img = Image.new('RGB', (720, 720 + 360))
+                img.paste(img1, (0, 0))
+                img.paste(img2, (0, 360))
+                
+                out_images.append(img)
                 
                 observation = encode(observation)
                 
@@ -265,33 +285,36 @@ def runner():
                     
                     episodic_length.append(abs(t3.total_seconds()))
                     break
-                # time.sleep(0.03)
+                # time.sleep(0.007)
             deviation_from_center += info[1]
             distance_covered += info[0]
             
             scores.append(current_ep_reward)
             cumulative_score = np.mean(scores)
 
-            print('Episode: {}'.format(episode),', Timestep: {}'.format(timestep),', Reward:  {:.2f}'.format(current_ep_reward),', Average Reward:  {:.2f}'.format(cumulative_score))
+            print('Episode: {}'.format(episode),', Timestep: {}'.format(timestep),', Reward:  {:.2f}'.format(current_ep_reward),', Average Reward:  {:.2f}'.format(cumulative_score), ', Distance covered: {:.2f}'.format(info[0]))
             
-            writer.add_scalar("TEST: Episodic Reward/episode", scores[-1], episode)
-            writer.add_scalar("TEST: Cumulative Reward/info", cumulative_score, episode)
-            writer.add_scalar("TEST: Cumulative Reward/(t)", cumulative_score, timestep)
-            writer.add_scalar("TEST: Episode Length (s)/info", np.mean(episodic_length), episode)
-            writer.add_scalar("TEST: Reward/(t)", current_ep_reward, timestep)
-            writer.add_scalar("TEST: Deviation from Center/episode", deviation_from_center, episode)
-            writer.add_scalar("TEST: Deviation from Center/(t)", deviation_from_center, timestep)
-            writer.add_scalar("TEST: Distance Covered (m)/episode", distance_covered, episode)
-            writer.add_scalar("TEST: Distance Covered (m)/(t)", distance_covered, timestep)
+            # writer.add_scalar("TEST: Episodic Reward/episode", scores[-1], episode)
+            # writer.add_scalar("TEST: Cumulative Reward/info", cumulative_score, episode)
+            # writer.add_scalar("TEST: Cumulative Reward/(t)", cumulative_score, timestep)
+            # writer.add_scalar("TEST: Episode Length (s)/info", np.mean(episodic_length), episode)
+            # writer.add_scalar("TEST: Reward/(t)", current_ep_reward, timestep)
+            # writer.add_scalar("TEST: Deviation from Center/episode", deviation_from_center, episode)
+            # writer.add_scalar("TEST: Deviation from Center/(t)", deviation_from_center, timestep)
+            # writer.add_scalar("TEST: Distance Covered (m)/episode", distance_covered, episode)
+            # writer.add_scalar("TEST: Distance Covered (m)/(t)", distance_covered, timestep)
             
             # log using wandb
-            wandb.log({"TEST: Episodic Reward/episode": scores[-1], "TEST: Cumulative Reward/info": cumulative_score, "TEST: Cumulative Reward/(t)": cumulative_score, "TEST: Episode Length (s)/info": np.mean(episodic_length), "TEST: Reward/(t)": current_ep_reward, "TEST: Deviation from Center/episode": deviation_from_center, "TEST: Deviation from Center/(t)": deviation_from_center, "TEST: Distance Covered (m)/episode": distance_covered, "TEST: Distance Covered (m)/(t)": distance_covered})
+            wandb.log({"TEST: Episodic Reward/episode": scores[-1], "TEST: Cumulative Reward/info": cumulative_score, "TEST: Cumulative Reward/(t)": cumulative_score, "TEST: Episode Length (s)/info": np.mean(episodic_length), "TEST: Reward/(t)": current_ep_reward, "TEST: Deviation from Center/episode": deviation_from_center, "TEST: Deviation from Center/(t)": deviation_from_center, "TEST: Distance Covered (m)/episode": distance_covered, "TEST: Distance Covered (m)/(t)": distance_covered, "Episode Length": t})
             
             episodic_length = list()
             deviation_from_center = 0
             distance_covered = 0
             break
 
+        # save the images as a gif
+        out_images[0].save('test.gif', save_all=True, append_images=out_images[1:], optimize=False, duration=40, loop=0)
+        print("GIF saved successfully.")
         print("Terminating the run.")
         sys.exit()
 

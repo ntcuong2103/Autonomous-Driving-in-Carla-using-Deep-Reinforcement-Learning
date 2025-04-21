@@ -39,7 +39,7 @@ class CameraSensor():
             return
         image.convert(carla.ColorConverter.CityScapesPalette)
         placeholder = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
-        placeholder1 = placeholder.reshape((image.width, image.height, 4))
+        placeholder1 = placeholder.reshape((image.height, image.width, 4))
         target = placeholder1[:, :, :3]
         self.front_camera.append(target)#/255.0)
 
@@ -52,15 +52,17 @@ class CameraSensorEnv:
 
     def __init__(self, vehicle):
 
-        pygame.init()
-        self.display = pygame.display.set_mode((720, 720),pygame.HWSURFACE | pygame.DOUBLEBUF)
+        # pygame.init()
+        # self.display = pygame.display.set_mode((720, 720),pygame.HWSURFACE | pygame.DOUBLEBUF)
         self.sensor_name = RGB_CAMERA
         self.parent = vehicle
         self.surface = None
         world = self.parent.get_world()
         self.sensor = self._set_camera_sensor(world)
         weak_self = weakref.ref(self)
-        self.sensor.listen(lambda image: CameraSensorEnv._get_third_person_camera(weak_self, image))
+        self.sensor.listen(lambda image: CameraSensorEnv._get_third_person_camera_data(weak_self, image))
+        self.captured_images = list()
+
 
     # Third camera is setup and provide the visual observations for our environment.
 
@@ -86,6 +88,15 @@ class CameraSensorEnv:
         self.display.blit(self.surface, (0, 0))
         pygame.display.flip()
 
+    @staticmethod
+    def _get_third_person_camera_data(weak_self, image):
+        self = weak_self()
+        if not self:
+            return
+        array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
+        placeholder1 = array.reshape((image.width, image.height, 4))
+        target = placeholder1[:, :, :3]
+        self.captured_images.append(target)#/255.0)
 
 
 # ---------------------------------------------------------------------|
