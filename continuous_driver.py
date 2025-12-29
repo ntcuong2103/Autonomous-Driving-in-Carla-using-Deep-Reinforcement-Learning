@@ -313,8 +313,21 @@ def runner():
             break
 
         # save the images as a gif
-        out_images[0].save('test.gif', save_all=True, append_images=out_images[1:], optimize=False, duration=40, loop=0)
-        print("GIF saved successfully.")
+        # out_images[0].save('test.gif', save_all=True, append_images=out_images[1:], optimize=False, duration=40, loop=0)
+        # print("GIF saved successfully.")
+        # save the images as a video
+        import cv2
+        out_images[0] = np.array(out_images[0])
+        out_images[0] = cv2.cvtColor(out_images[0], cv2.COLOR_RGB2BGR)
+        out = cv2.VideoWriter('test.avi', cv2.VideoWriter_fourcc(*'XVID'), 30, (out_images[0].shape[1], out_images[0].shape[0]))
+        for i in range(len(out_images)):
+            out_images[i] = np.array(out_images[i])
+            out_images[i] = cv2.cvtColor(out_images[i], cv2.COLOR_RGB2BGR)
+            out.write(out_images[i])
+        out.release()
+        print("Video saved successfully.")
+    
+        
         print("Terminating the run.")
         sys.exit()
 
